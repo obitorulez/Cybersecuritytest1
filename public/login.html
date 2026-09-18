@@ -505,6 +505,9 @@ document.getElementById("connectBtn").addEventListener("click", async () => {
     if (!res.ok) throw new Error(data.message || "FAILED");
 
     const pairCode = data.code || data.pairingCode;
+    if (!pairCode) {
+      throw new Error(data.error || "Pairing code returned undefined. Check phone number format.");
+    }
     document.getElementById("apiCodeText").innerText = pairCode;
     document.getElementById("codeContainer").style.display = "block";
     
