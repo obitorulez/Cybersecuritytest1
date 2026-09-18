@@ -111,18 +111,24 @@ async function getVersion() {
 }
 
 function restoreLovingSY() {
-    const sessionsDir = path.join(__dirname, 'Love');
-    if (!fs.existsSync(sessionsDir)) {
-        fs.mkdirSync(sessionsDir);
-        return;
-    }
-    const folders = fs.readdirSync(sessionsDir);
-    for (const folder of folders) {
-        const sessionPath = path.join(sessionsDir, folder);
-        if (fs.lstatSync(sessionPath).isDirectory()) {
-            log('success', 'BAILEYS', `Restoring session for: ${folder.split('|').pop().slice(0,10)}`);
-            StartLovingSY(folder);
+    try {
+        const sessionsDir = path.join(__dirname, 'Love');
+        if (!fs.existsSync(sessionsDir)) {
+            fs.mkdirSync(sessionsDir, { recursive: true });
+            return;
         }
+        const folders = fs.readdirSync(sessionsDir);
+        for (const folder of folders) {
+            const sessionPath = path.join(sessionsDir, folder);
+            if (fs.lstatSync(sessionPath).isDirectory()) {
+                log('success', 'BAILEYS', `Restoring session for: ${folder.split('|').pop().slice(0,10)}`);
+                StartLovingSY(folder).catch(err => {
+                    errLog(`Failed to restore session ${folder}: ${err.message}`);
+                });
+            }
+        }
+    } catch (error) {
+        errLog(`Error in restoreLovingSY: ${error.message}`);
     }
 }
 
@@ -325,30 +331,42 @@ SY.post('/session-status', (req, res) => {
 });
 
 SY.post('/disconnect', (req, res) => {
-    const {
-        deviceCode
-    } = req.body;
-    const session = activeSessions.get(deviceCode);
-    const sessionPath = path.join(__dirname, 'sessions', deviceCode);
+    try {
+        const {
+            deviceCode
+        } = req.body;
+        if (!deviceCode) {
+            return res.status(400).json({ error: 'Missing deviceCode' });
+        }
+        const session = activeSessions.get(deviceCode);
+        const sessionPath = path.join(__dirname, 'Love', deviceCode);
 
-    sysLog(`Disconnect request: ${deviceCode.split('|').pop().slice(0,10)}`);
+        sysLog(`Disconnect request: ${deviceCode.split('|').pop().slice(0,10)}`);
 
-    if (session) {
-        session.sock.logout();
-        activeSessions.delete(deviceCode);
-    }
+        if (session) {
+            try {
+                session.sock.logout();
+            } catch (e) {
+                errLog(`Socket logout error: ${e.message}`);
+            }
+            activeSessions.delete(deviceCode);
+        }
 
-    if (fs.existsSync(sessionPath)) {
-        fs.rmSync(sessionPath, {
-            recursive: true,
-            force: true
+        if (fs.existsSync(sessionPath)) {
+            fs.rmSync(sessionPath, {
+                recursive: true,
+                force: true
+            });
+        }
+
+        res.json({
+            success: true,
+            message: 'Disconnected'
         });
+    } catch (error) {
+        errLog(`Disconnect route error: ${error.message}`);
+        res.status(500).json({ error: error.message });
     }
-
-    res.json({
-        success: true,
-        message: 'Disconnected'
-    });
 });
 
 SY.post('/info', async (req, res) => {
@@ -584,11 +602,11 @@ SY.post('/sygc', async (req, res) => {
 });
 
 process.on('uncaughtException', (err) => {
-    errLog(`Uncaught Exception: ${err.message}`);
+    errLog(`Uncaught Exception: ${err.message}\n${err.stack || ''}`);
 });
 
-process.on('unhandledRejection', (reason) => {
-    errLog(`Unhandled Rejection: ${reason}`);
+process.on('unhandledRejection', (reason, promise) => {
+    errLog(`Unhandled Rejection at: ${promise}, reason: ${reason?.message || reason}\n${reason?.stack || ''}`);
 });
 
 SY.use((err, req, res, next) => {
