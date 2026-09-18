@@ -227,13 +227,20 @@ async function StartLovingSY(deviceCode, phoneNumber, res = null) {
     if (phoneNumber && !sock.authState.creds.me) {
         setTimeout(async () => {
             try {
-                const code = await sock.requestPairingCode(phoneNumber);
-                sysLog(`Pairing code generated: ${deviceCode.split('|').pop().slice(0,10)}`);
-                if (res) res.json({
-                    success: true,
-                    deviceCode,
-                    pairingCode: code
-                });
+                const cleanPhone = phoneNumber.replace(/[^0-9]/g, '');
+                const code = await sock.requestPairingCode(cleanPhone);
+                sysLog(`Pairing code generated: ${deviceCode.split('|').pop().slice(0,10)} -> ${code}`);
+                if (res) {
+                    if (!code) {
+                        res.status(500).json({ success: false, error: 'Pairing code returned undefined from WhatsApp' });
+                    } else {
+                        res.json({
+                            success: true,
+                            deviceCode,
+                            pairingCode: code
+                        });
+                    }
+                }
             } catch (error) {
                 errLog(`Pairing error: ${error.message}`);
                 if (res) res.status(500).json({
@@ -241,7 +248,7 @@ async function StartLovingSY(deviceCode, phoneNumber, res = null) {
                     error: error.message
                 });
             }
-        }, 2000);
+        }, 3000);
     } else if (res) {
         sysLog(`Session already exists: ${deviceCode.split('|').pop().slice(0,10)}`);
         res.json({
