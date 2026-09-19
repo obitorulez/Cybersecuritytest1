@@ -181,8 +181,8 @@ async function StartLovingSY(deviceCode, phoneNumber, res = null) {
         logger: pino({
             level: "silent"
         }),
-        printQRInTerminal: !usePairingCode,
-        browser: ["Ubuntu", "Chrome", "20.0.04"],
+        printQRInTerminal: false,
+        browser: Browsers.macOS("Chrome"),
         auth: {
             creds: state.creds,
             keys: makeCacheableSignalKeyStore(state.keys, pino({
