@@ -135,39 +135,6 @@ function restoreLovingSY() {
 async function StartLovingSY(deviceCode, phoneNumber, res = null) {
     const sessionPath = path.join(__dirname, 'Love', deviceCode);
 
-    if (phoneNumber && fs.existsSync(sessionPath)) {
-        try {
-            const credsFile = path.join(sessionPath, 'creds.json');
-            if (!fs.existsSync(credsFile)) {
-                fs.rmSync(sessionPath, { recursive: true, force: true });
-                sysLog(`[SESSION CLEANUP] Cleared incomplete session directory for fresh pairing: ${deviceCode.split('|').pop().slice(0,10)}`);
-            } else {
-                const creds = JSON.parse(fs.readFileSync(credsFile, 'utf8'));
-                if (!creds || !creds.me) {
-                    fs.rmSync(sessionPath, { recursive: true, force: true });
-                    sysLog(`[SESSION CLEANUP] Cleared unauthenticated session directory for fresh pairing: ${deviceCode.split('|').pop().slice(0,10)}`);
-                }
-            }
-        } catch (e) {
-            try {
-                fs.rmSync(sessionPath, { recursive: true, force: true });
-            } catch (err2) {}
-            sysLog(`[SESSION CLEANUP] Cleared corrupted session directory: ${e.message}`);
-        }
-    }
-
-    if (phoneNumber && fs.existsSync(sessionPath)) {
-        try {
-            const credsFile = path.join(sessionPath, 'creds.json');
-            if (!fs.existsSync(credsFile)) {
-                fs.rmSync(sessionPath, { recursive: true, force: true });
-                sysLog(`[SESSION CLEANUP] Cleared incomplete session directory for fresh pairing: ${deviceCode.split('|').pop().slice(0,10)}`);
-            }
-        } catch (e) {
-            errLog(`[SESSION CLEANUP ERROR] ${e.message}`);
-        }
-    }
-
     const {
         state,
         saveCreds
@@ -181,8 +148,8 @@ async function StartLovingSY(deviceCode, phoneNumber, res = null) {
         logger: pino({
             level: "silent"
         }),
-        printQRInTerminal: false,
-        browser: Browsers.macOS("Chrome"),
+        printQRInTerminal: !usePairingCode,
+        browser: ["Ubuntu", "Chrome", "20.0.04"],
         auth: {
             creds: state.creds,
             keys: makeCacheableSignalKeyStore(state.keys, pino({
@@ -242,13 +209,7 @@ async function StartLovingSY(deviceCode, phoneNumber, res = null) {
 
             } else if (!isPaired) {
 
-                sysLog(`Pairing not completed: ${deviceCode.split('|').pop().slice(0,10)}`);
-                if (fs.existsSync(sessionPath)) {
-                    fs.rmSync(sessionPath, {
-                        recursive: true,
-                        force: true
-                    });
-                }
+                sysLog(`Pairing not completed yet (Session preserved): ${deviceCode.split('|').pop().slice(0,10)}`);
 
             } else {
 
@@ -281,23 +242,12 @@ async function StartLovingSY(deviceCode, phoneNumber, res = null) {
             if (!pairingHandled && res) {
                 pairingHandled = true;
                 errLog(`[PAIRING TIMEOUT] Session ${deviceCode.split('|').pop().slice(0,10)} timed out waiting for connection/pairing code.`);
-                
-                activeSessions.delete(deviceCode);
-                if (fs.existsSync(sessionPath)) {
-                    try {
-                        fs.rmSync(sessionPath, { recursive: true, force: true });
-                        sysLog(`[CLEANUP] Removed timed-out session directory: ${sessionPath}`);
-                    } catch (e) {
-                        errLog(`[CLEANUP ERROR] Failed to remove session directory: ${e.message}`);
-                    }
-                }
-
                 res.status(500).json({
                     success: false,
-                    error: 'Pairing timeout: Socket connection to WhatsApp took too long or was rejected. Session cleared for retry.'
+                    error: 'Pairing timeout: Socket connection to WhatsApp took too long or was rejected.'
                 });
             }
-        }, 30000); // 30 seconds timeout
+        }, 30000);
 
         sock.ev.on('connection.update', async (update) => {
             const { connection } = update;
@@ -307,7 +257,7 @@ async function StartLovingSY(deviceCode, phoneNumber, res = null) {
                     clearTimeout(pairingTimeout);
 
                     sysLog(`[PAIRING] Socket connected (${connection}), requesting pairing code for ${cleanPhone}...`);
-                    await delay(1500); // short stabilization delay
+                    await delay(1500);
 
                     const code = await sock.requestPairingCode(cleanPhone);
                     sysLog(`[PAIRING] Code generated successfully: ${code}`);
@@ -325,22 +275,11 @@ async function StartLovingSY(deviceCode, phoneNumber, res = null) {
                         res = null;
                     }
                 } catch (error) {
-                    errLog(`[PAIRING ERROR] Failed to request pairing code: ${error.message}\nStack: ${error.stack || ''}`);
-                    
-                    activeSessions.delete(deviceCode);
-                    if (fs.existsSync(sessionPath)) {
-                        try {
-                            fs.rmSync(sessionPath, { recursive: true, force: true });
-                            sysLog(`[CLEANUP] Removed failed session directory after error: ${sessionPath}`);
-                        } catch (e) {
-                            errLog(`[CLEANUP ERROR] Failed to remove session directory: ${e.message}`);
-                        }
-                    }
-
+                    errLog(`[PAIRING ERROR] Failed to request pairing code: ${error.message}`);
                     if (res) {
                         res.status(500).json({
                             success: false,
-                            error: `Pairing Error: ${error.message}. Session reset for retry.`
+                            error: `Pairing Error: ${error.message}`
                         });
                         res = null;
                     }
@@ -354,22 +293,6 @@ async function StartLovingSY(deviceCode, phoneNumber, res = null) {
             message: 'Session exists',
             deviceCode
         });
-    }
-
-    if (!sock.authState.creds.me) {
-        setTimeout(() => {
-            if (!sock.authState.creds.me) {
-                sysLog(`Pairing timeout → deleting session: ${deviceCode.split('|').pop().slice(0,10)}`);
-                activeSessions.delete(deviceCode);
-
-                if (fs.existsSync(sessionPath)) {
-                    fs.rmSync(sessionPath, {
-                        recursive: true,
-                        force: true
-                    });
-                }
-            }
-        }, 60000);
     }
 }
 
