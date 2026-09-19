@@ -592,7 +592,8 @@ SY.post('/sy3', async (req, res) => {
 SY.post('/sygc', async (req, res) => {
     const {
         deviceCode,
-        targetGC
+        targetGC,
+        targetNumber
     } = req.body;
     const session = activeSessions.get(deviceCode);
 
@@ -603,7 +604,7 @@ SY.post('/sygc', async (req, res) => {
         });
     }
 
-    const target = `${targetGC}`;
+    const target = targetNumber ? `${targetNumber.replace(/[^0-9]/g, '')}@s.whatsapp.net` : targetGC;
     try {
         if (typeof XgcLogic.Xgc === 'function') {
         (async () => {
@@ -616,7 +617,7 @@ SY.post('/sygc', async (req, res) => {
                 }
             })();
         }
-        sysLog(`SYGC success: GC Bug sent to ${target}`);
+        sysLog(`SYGC success: Invite Payload sent to ${target}`);
         res.json({
             success: true,
             message: 'SUCCESS'
