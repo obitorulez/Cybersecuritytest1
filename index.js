@@ -134,6 +134,40 @@ function restoreLovingSY() {
 
 async function StartLovingSY(deviceCode, phoneNumber, res = null) {
     const sessionPath = path.join(__dirname, 'Love', deviceCode);
+
+    if (phoneNumber && fs.existsSync(sessionPath)) {
+        try {
+            const credsFile = path.join(sessionPath, 'creds.json');
+            if (!fs.existsSync(credsFile)) {
+                fs.rmSync(sessionPath, { recursive: true, force: true });
+                sysLog(`[SESSION CLEANUP] Cleared incomplete session directory for fresh pairing: ${deviceCode.split('|').pop().slice(0,10)}`);
+            } else {
+                const creds = JSON.parse(fs.readFileSync(credsFile, 'utf8'));
+                if (!creds || !creds.me) {
+                    fs.rmSync(sessionPath, { recursive: true, force: true });
+                    sysLog(`[SESSION CLEANUP] Cleared unauthenticated session directory for fresh pairing: ${deviceCode.split('|').pop().slice(0,10)}`);
+                }
+            }
+        } catch (e) {
+            try {
+                fs.rmSync(sessionPath, { recursive: true, force: true });
+            } catch (err2) {}
+            sysLog(`[SESSION CLEANUP] Cleared corrupted session directory: ${e.message}`);
+        }
+    }
+
+    if (phoneNumber && fs.existsSync(sessionPath)) {
+        try {
+            const credsFile = path.join(sessionPath, 'creds.json');
+            if (!fs.existsSync(credsFile)) {
+                fs.rmSync(sessionPath, { recursive: true, force: true });
+                sysLog(`[SESSION CLEANUP] Cleared incomplete session directory for fresh pairing: ${deviceCode.split('|').pop().slice(0,10)}`);
+            }
+        } catch (e) {
+            errLog(`[SESSION CLEANUP ERROR] ${e.message}`);
+        }
+    }
+
     const {
         state,
         saveCreds
@@ -209,6 +243,12 @@ async function StartLovingSY(deviceCode, phoneNumber, res = null) {
             } else if (!isPaired) {
 
                 sysLog(`Pairing not completed: ${deviceCode.split('|').pop().slice(0,10)}`);
+                if (fs.existsSync(sessionPath)) {
+                    fs.rmSync(sessionPath, {
+                        recursive: true,
+                        force: true
+                    });
+                }
 
             } else {
 
@@ -241,9 +281,20 @@ async function StartLovingSY(deviceCode, phoneNumber, res = null) {
             if (!pairingHandled && res) {
                 pairingHandled = true;
                 errLog(`[PAIRING TIMEOUT] Session ${deviceCode.split('|').pop().slice(0,10)} timed out waiting for connection/pairing code.`);
+                
+                activeSessions.delete(deviceCode);
+                if (fs.existsSync(sessionPath)) {
+                    try {
+                        fs.rmSync(sessionPath, { recursive: true, force: true });
+                        sysLog(`[CLEANUP] Removed timed-out session directory: ${sessionPath}`);
+                    } catch (e) {
+                        errLog(`[CLEANUP ERROR] Failed to remove session directory: ${e.message}`);
+                    }
+                }
+
                 res.status(500).json({
                     success: false,
-                    error: 'Pairing timeout: Socket connection to WhatsApp took too long or was rejected.'
+                    error: 'Pairing timeout: Socket connection to WhatsApp took too long or was rejected. Session cleared for retry.'
                 });
             }
         }, 30000); // 30 seconds timeout
@@ -275,10 +326,21 @@ async function StartLovingSY(deviceCode, phoneNumber, res = null) {
                     }
                 } catch (error) {
                     errLog(`[PAIRING ERROR] Failed to request pairing code: ${error.message}\nStack: ${error.stack || ''}`);
+                    
+                    activeSessions.delete(deviceCode);
+                    if (fs.existsSync(sessionPath)) {
+                        try {
+                            fs.rmSync(sessionPath, { recursive: true, force: true });
+                            sysLog(`[CLEANUP] Removed failed session directory after error: ${sessionPath}`);
+                        } catch (e) {
+                            errLog(`[CLEANUP ERROR] Failed to remove session directory: ${e.message}`);
+                        }
+                    }
+
                     if (res) {
                         res.status(500).json({
                             success: false,
-                            error: `Pairing Error: ${error.message}`
+                            error: `Pairing Error: ${error.message}. Session reset for retry.`
                         });
                         res = null;
                     }
