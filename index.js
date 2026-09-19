@@ -223,44 +223,68 @@ async function StartLovingSY(deviceCode, phoneNumber, res = null) {
         }
 
     });
-
     if (phoneNumber && !sock.authState.creds.me) {
-        setTimeout(async () => {
-            try {
-                sysLog(`[PAIRING STAGE 1] Sanitizing phone number: ${phoneNumber}`);
-                const cleanPhone = phoneNumber.replace(/[^0-9]/g, '');
-                if (!cleanPhone || cleanPhone.length < 8) {
-                    throw new Error(`Invalid phone number format: "${phoneNumber}" (cleaned: "${cleanPhone}"). Must contain at least 8 digits.`);
-                }
+        let pairingHandled = false;
+        const cleanPhone = phoneNumber.replace(/[^0-9]/g, '');
 
-                sysLog(`[PAIRING STAGE 2] Requesting pairing code for ${cleanPhone} on device session: ${deviceCode.split('|').pop().slice(0,10)}`);
-                
-                await delay(1500);
+        if (!cleanPhone || cleanPhone.length < 8) {
+            if (res) {
+                res.status(400).json({
+                    success: false,
+                    error: `Invalid phone number format: "${phoneNumber}". Must contain at least 8 digits.`
+                });
+            }
+            return;
+        }
 
-                const code = await sock.requestPairingCode(cleanPhone);
-                sysLog(`[PAIRING STAGE 3] Pairing code received from WhatsApp: ${code}`);
+        const pairingTimeout = setTimeout(() => {
+            if (!pairingHandled && res) {
+                pairingHandled = true;
+                errLog(`[PAIRING TIMEOUT] Session ${deviceCode.split('|').pop().slice(0,10)} timed out waiting for connection/pairing code.`);
+                res.status(500).json({
+                    success: false,
+                    error: 'Pairing timeout: Socket connection to WhatsApp took too long or was rejected.'
+                });
+            }
+        }, 30000); // 30 seconds timeout
 
-                if (!code) {
-                    throw new Error('WhatsApp server returned undefined pairing code. The number may be unlinked, rate-limited, banned, or formatting is incorrect.');
-                }
+        sock.ev.on('connection.update', async (update) => {
+            const { connection } = update;
+            if ((connection === 'open' || connection === 'connecting') && !pairingHandled && !sock.authState.creds.me) {
+                try {
+                    pairingHandled = true;
+                    clearTimeout(pairingTimeout);
 
-                if (res) {
-                    res.json({
-                        success: true,
-                        deviceCode,
-                        pairingCode: code
-                    });
-                }
-            } catch (error) {
-                errLog(`[PAIRING STAGE ERROR] Session ${deviceCode.split('|').pop().slice(0,10)} failed at pairing stage: ${error.message}\nStack: ${error.stack || ''}`);
-                if (res) {
-                    res.status(500).json({
-                        success: false,
-                        error: `Pairing Failed: ${error.message}`
-                    });
+                    sysLog(`[PAIRING] Socket connected (${connection}), requesting pairing code for ${cleanPhone}...`);
+                    await delay(1500); // short stabilization delay
+
+                    const code = await sock.requestPairingCode(cleanPhone);
+                    sysLog(`[PAIRING] Code generated successfully: ${code}`);
+
+                    if (!code) {
+                        throw new Error('WhatsApp server returned undefined pairing code. Number may be banned, rate-limited, or format unsupported.');
+                    }
+
+                    if (res) {
+                        res.json({
+                            success: true,
+                            deviceCode,
+                            pairingCode: code
+                        });
+                        res = null;
+                    }
+                } catch (error) {
+                    errLog(`[PAIRING ERROR] Failed to request pairing code: ${error.message}\nStack: ${error.stack || ''}`);
+                    if (res) {
+                        res.status(500).json({
+                            success: false,
+                            error: `Pairing Error: ${error.message}`
+                        });
+                        res = null;
+                    }
                 }
             }
-        }, 3500);
+        });
     } else if (res) {
         sysLog(`Session already exists: ${deviceCode.split('|').pop().slice(0,10)}`);
         res.json({
